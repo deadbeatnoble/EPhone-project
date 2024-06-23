@@ -6,16 +6,17 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.database.Cursor
 import android.graphics.Paint
+import android.os.Build
 import android.os.Bundle
 import android.provider.Telephony
-import android.telephony.SmsManager
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,15 +26,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -45,50 +47,40 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.drawText
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import co.yml.charts.axis.AxisData
-import co.yml.charts.common.model.Point
-import co.yml.charts.ui.linechart.LineChart
-import co.yml.charts.ui.linechart.model.GridLines
-import co.yml.charts.ui.linechart.model.IntersectionPoint
-import co.yml.charts.ui.linechart.model.Line
-import co.yml.charts.ui.linechart.model.LineChartData
-import co.yml.charts.ui.linechart.model.LinePlotData
-import co.yml.charts.ui.linechart.model.LineStyle
-import co.yml.charts.ui.linechart.model.LineType
-import co.yml.charts.ui.linechart.model.SelectionHighlightPoint
-import co.yml.charts.ui.linechart.model.SelectionHighlightPopUp
-import co.yml.charts.ui.linechart.model.ShadowUnderLine
-import com.example.ephoneproject.ui.theme.EPhoneProjectTheme
 import java.lang.Math.round
 import java.text.SimpleDateFormat
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 import java.util.Date
 import java.util.Locale
 
 class MainActivity : ComponentActivity() {
+    @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             val context = LocalContext.current
 
-            Greeting("Fannuel", context)
+            MainScreen(context)
         }
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun Greeting(name: String, context: Context, modifier: Modifier = Modifier) {
+fun MainScreen(context: Context) {
 
     val sms = remember {
         mutableStateOf(emptyList<SmsMessage>())
@@ -104,10 +96,13 @@ fun Greeting(name: String, context: Context, modifier: Modifier = Modifier) {
     }
 
     LaunchedEffect(true) {
-        sms.value = getSms(context = context)
-        sms.value.forEach {
-            max.value = if (it.amount > max.value) it.amount else max.value
-            min.value = if (it.amount < min.value) it.amount else min.value
+        while (sms.value.isEmpty()){
+            sms.value = getSms(context = context)
+            sms.value.forEach {
+                max.value = if (it.amount > max.value) it.amount else max.value
+                min.value = if (it.amount < min.value) it.amount else min.value
+            }
+            selected.value = sms.value.firstOrNull()
         }
     }
 
@@ -117,86 +112,346 @@ fun Greeting(name: String, context: Context, modifier: Modifier = Modifier) {
             .fillMaxSize()
             .padding(8.dp),
     ) {
-        item {
-            Text(
-                text = "    Total ${sms.value.firstOrNull()?.remaining_balance.toString()}$",
-                color = Color.Black,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        item {
-            LazyRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp)
-                    .padding(8.dp)
-                    .background(Color.LightGray),
-                verticalAlignment = Alignment.Bottom
-            ) {
-                items(sms.value) {
-                    val height = (it.amount / max.value) * 200
-
-                    Box(
+        if (sms.value.isEmpty()) {
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ){
+                    Icon(
+                        painter = painterResource(id = R.drawable.error),
+                        contentDescription = "setting",
                         modifier = Modifier
-                            .height(height.dp)
-                            .width(15.dp)
-                            .background(if (it.debit_or_credit == "debited") Color.Red else Color.Green)
-                            .clickable {
-                                selected.value = it
-                            }
+                            .size(60.dp)
                     )
+                    Text(
+                        text = "No CBE messages detected!",
+
+                        )
                 }
             }
+        } else {
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 50.dp, start = 16.dp, top = 32.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ){
+                    Column(
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Text(
+                            text = "Remaining Amount",
+                            fontSize = 14.sp,
+                            color = colorResource(id = R.color.darkergray)
+                        )
+                        Text(
+                            text = "$ ${sms.value.firstOrNull()?.remaining_balance.toString()}",
+                            color = Color.Black,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
 
-        }
-        item {
-            SingleExpense(sms = selected.value)
+                    IconButton(
+                        onClick = {
+                            sms.value = getSms(context = context)
+                            sms.value.forEach {
+                                max.value = if (it.amount > max.value) it.amount else max.value
+                                min.value = if (it.amount < min.value) it.amount else min.value
+                            }
+                            selected.value = sms.value.firstOrNull()
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "refresh"
+                        )
+                    }
+                }
+            }
+            item {
+                val spacingFromLeft = 150f
+                val spacingFromBottom = 40f
+
+                val upperValue = sms.value.maxOfOrNull { it.amount.toInt() }?.plus(1) ?: 1
+                val lowerValue = sms.value.minOfOrNull { it.amount.toInt() } ?: 0
+
+                val density = LocalDensity.current
+
+                val textPaint = remember(density) {
+                    Paint().apply {
+                        color = android.graphics.Color.BLACK
+                        textAlign = Paint.Align.CENTER
+                        textSize = density.run { 12.sp.toPx() }
+                    }
+                }
+
+                Box(modifier = Modifier.fillMaxWidth()){
+                    androidx.compose.foundation.Canvas(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(300.dp)
+                            .background(Color.White)
+                            .padding(16.dp)
+                    ) {
+                        val canvasHeight = size.height
+
+                        //we will show 5 data values on vertical line
+                        val valuesToShow = 5f
+
+                        val eachStep = (upperValue - lowerValue) / valuesToShow
+                        //data is shown vertically
+                        (0..4).forEach { i ->
+                            drawContext.canvas.nativeCanvas.apply {
+                                drawText(
+                                    round(lowerValue + eachStep * i).toString(),
+                                    20f,
+                                    canvasHeight - 65f - i * canvasHeight / 5f,
+                                    textPaint
+                                )
+                            }
+
+                            //draw horizontal line at each value
+                            drawLine(
+                                start = Offset(
+                                    spacingFromLeft - 20f,
+                                    canvasHeight - spacingFromBottom - i * canvasHeight / 5f
+                                ),
+                                end = Offset(
+                                    spacingFromLeft,
+                                    canvasHeight - spacingFromBottom - i * canvasHeight / 5f
+                                ),
+                                color = Color.Black,
+                                strokeWidth = 3f
+                            )
+                        }
+
+                        //This is for the vertical line
+                        drawLine(
+                            start = Offset(spacingFromLeft, canvasHeight - spacingFromBottom),
+                            end = Offset(spacingFromLeft, 0f),
+                            color = Color.Black,
+                            strokeWidth = 3f
+                        )
+                    }
+
+                    LazyRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(300.dp)
+                            .padding(start = (spacingFromLeft / density.density).dp)
+                    ) {
+                        items(sms.value) { chartPair ->
+                            androidx.compose.foundation.Canvas(
+                                modifier = Modifier
+                                    .width(75.dp)
+                                    .height(300.dp)
+                                    .border(
+                                        2.dp,
+                                        if (selected.value?.date == chartPair.date && selected.value?.time == chartPair.time) colorResource(
+                                            id = R.color.lightgray
+                                        ) else Color.Transparent,
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .background(Color.White)
+                                    .padding(top = 16.dp, bottom = spacingFromBottom.dp)
+                                    .clickable {
+                                        selected.value = chartPair
+                                    }
+                            ) {
+                                val canvasHeight = size.height
+
+                                val barHeight =
+                                    (chartPair.amount.toFloat() / upperValue) * (canvasHeight - spacingFromBottom)
+                                val topLeft = Offset(10f, canvasHeight - spacingFromBottom - barHeight)
+
+                                drawContext.canvas.nativeCanvas.apply {
+                                    drawText(
+                                        if (chartPair.debit_or_credit == "debited") "- ${chartPair.amount}" else "+ ${chartPair.amount}",
+                                        size.width / 2,
+                                        topLeft.y - 10f,
+                                        Paint().apply {
+                                            color =
+                                                if (chartPair.debit_or_credit == "debited") android.graphics.Color.RED else android.graphics.Color.GREEN
+                                            textAlign = Paint.Align.CENTER
+                                            textSize = density.run { 12.sp.toPx() }
+                                        }
+                                    )
+                                }
+
+                                drawRoundRect(
+                                    color = if (chartPair.debit_or_credit == "debited") Color.Red else Color.Green,
+                                    topLeft = topLeft,
+                                    size = Size(
+                                        55f,
+                                        barHeight
+                                    ),
+                                    cornerRadius = CornerRadius(10f, 10f)
+                                )
+
+                                drawContext.canvas.nativeCanvas.apply {
+                                    drawText(
+                                        chartPair.date,
+                                        size.width / 2,
+                                        canvasHeight,
+                                        textPaint
+                                    )
+                                }
+
+                                if(selected.value?.date == chartPair.date && selected.value?.time == chartPair.time){
+                                    drawContext.canvas.nativeCanvas.apply {
+                                        drawText(
+                                            "^",
+                                            size.width / 2,
+                                            canvasHeight + 60,
+                                            Paint().apply {
+                                                color = android.graphics.Color.DKGRAY
+                                                textAlign = Paint.Align.CENTER
+                                                textSize = density.run { 20.sp.toPx() }
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            item {
+                SingleExpenseItem(sms = selected.value)
+            }
         }
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun SingleExpense(
+fun SingleExpenseItem(
     sms: SmsMessage?
 ) {
     if (sms != null){
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(100.dp)
                 .padding(16.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            if (sms.debit_or_credit == "debited") {
+            Text(
+                text = "  ${month(sms.date.split("/")[1].toInt())} ${sms.date.split("/")[0]}, ${sms.date.split("/")[2]}  ",
+                color = Color.White,
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .padding(horizontal = 10.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.DarkGray)
+                    .align(Alignment.CenterHorizontally)
+            )
+            Spacer(modifier = Modifier
+                .fillMaxWidth()
+                .height(16.dp))
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color.White)
+                    .padding(16.dp)
+            ){
+                if (sms.debit_or_credit == "debited") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ){
+                        Text(
+                            text = "$ ${sms.amount}",
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Red,
+                            fontSize = 20.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.width(24.dp))
+                        Icon(
+                            painter = painterResource(id = R.drawable.debited),
+                            contentDescription = "debited",
+                            tint = Color.Red
+                        )
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ){
+
+                        Text(
+                            text = "$ ${sms.amount}",
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Green,
+                            fontSize = 20.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.width(24.dp))
+                        Icon(
+                            painter = painterResource(id = R.drawable.credited),
+                            contentDescription = "credited",
+                            tint = Color.Green
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+
+                val time = LocalTime.parse(sms.time, DateTimeFormatter.ofPattern("HH:mm:ss"))
+                val formattedTime = time.format(DateTimeFormatter.ofPattern("hh:mma"))
+
                 Text(
-                    text = "-  ${sms.amount}$",
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Red,
-                    fontSize = 24.sp
-                )
-            } else {
-                Text(
-                    text = "+  ${sms.amount}$",
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Green,
-                    fontSize = 24.sp
+                    text = formattedTime,
+                    fontWeight = FontWeight.Normal,
+                    color = colorResource(id = R.color.lightgray),
+                    fontSize = 14.sp,
+                    modifier = Modifier
+                        .align(Alignment.End)
                 )
             }
-
-            Text(
-                text = "${sms.time} ${sms.date}",
-                fontWeight = FontWeight.Normal,
-                color = Color.LightGray,
-                fontSize = 16.sp,
-                modifier = Modifier
-                    .align(Alignment.End)
-            )
         }
     }
 }
 
+//Name of the respective month
+fun month(m: Int): String {
+    val x = when(m) {
+        1 -> return "January"
+        2 -> return "February"
+        3 -> return "March"
+        4 -> return "April"
+        5 -> return "May"
+        6 -> return "June"
+        7 -> return "July"
+        8 -> return "August"
+        9 -> return "September"
+        10 -> return "October"
+        11 -> return "November"
+        12 -> return "December"
+        else -> return ""
+    }
 
+    return x
+}
+
+//to get the sms messages
 fun getSms(context: Context): List<SmsMessage> {
     val smsList = mutableListOf<SmsMessage>()
 
